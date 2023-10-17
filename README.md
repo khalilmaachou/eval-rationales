@@ -60,5 +60,6 @@ The following command line use the available `bert-base-uncased` from the Huggin
 - When you want to do the explainability using ERASER code, keep in mind that the batch_size used in the train phase and prediction phase need to be the same.
 
 ## Contact
-If you have any problem at all or any suggestions that can optimize this library, you can always contact me using my personal mail: khalilmaachou.99@gmail.com or using this discord server: https://discord.gg/eDTC6688WX
-Tutorial using thins library [HERE](https://youtu.be/3M1MJPhmMQE)
+If you have any problem at all or any suggestions that can optimize this library, you can always contact me using my personal mail: khalilmaachou.99@gmail.com or using this discord server: https://discord.gg/eDTC6688WX.
+
+Tutorial using thins library [HERE](https://youtu.be/3M1MJPhmMQE).
