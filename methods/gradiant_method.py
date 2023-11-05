@@ -1,12 +1,9 @@
 import torch
 
-from utils import create_dataset_huggingface, create_dataset, CustomDataset, create_batch, summarize_attributions, get_token_offsets, create_batch_huggingface, show_text_with_normalized_scores_and_features
+from utils import create_batch, summarize_attributions, get_token_offsets, show_text_with_normalized_scores_and_features
 from methods.default import DefaultMethod
-from torch.utils.data import DataLoader, Dataset
 
-from captum.attr import IntegratedGradients, LayerIntegratedGradients
-
-import math
+from captum.attr import LayerIntegratedGradients
 
 import numpy as np
 import gc
@@ -32,7 +29,7 @@ class GradientExplainer(DefaultMethod):
             kwarg['return_tensors']="pt"
             kwarg['truncation']=True
             kwarg['max_length']=512
-            inputs_in, _, _ = create_batch_huggingface(inputs, self.query, self.model.tokenizer, self.model.device, kwarg)
+            inputs_in, always_kp_ma, _ = self.model.create_batchs(inputs,1, self.query)
             
             self._embedding_layer = self.model._embedding_layer
             features, attentions = [], []
@@ -65,7 +62,7 @@ class GradientExplainer(DefaultMethod):
 
                 attri = summarize_attributions(attri).detach().data[offsets[i]]
                 attentions.append(attri.cpu().tolist())
-                always_keep_mask = [0]*attri.size()[0]
+                always_keep_mask = always_kp_ma[i][:attri.size()[0]]
                 always_keep_masks.append(always_keep_mask)
                 
                 del outputs
@@ -73,7 +70,20 @@ class GradientExplainer(DefaultMethod):
                 del attri
                 torch.cuda.empty_cache()
                 i += 1
-        
+
+            metadatas= []
+            if self.query != None:
+                query_words = ["[SEP]"] + self.query.split() + ["[SEP]"]
+            else:
+                query_words = ["[SEP]"]
+                
+            for i in range(len(inputs)):
+                metadata = {}
+                metadata['always_keep_mask'] = np.array(always_keep_masks[i])
+                metadata['convert_tokens_to_instance'] = self.model.convert_tokens_to_instance
+                metadata['tokens'] = (list(filter(lambda x: bool(len(x)), inputs[i].strip().split(' '))) + query_words)[:len(always_keep_masks[i])]
+                metadata['all_tokens'] = list(filter(lambda x: bool(len(x)), inputs[i].strip().split(' '))) + query_words
+                metadatas.append(metadata)
         else :
                 #init
                 model = self.model.model
@@ -147,23 +157,19 @@ class GradientExplainer(DefaultMethod):
 
                 attentions = [item for sublist in attentions for item in sublist]
             
-        if self.query != None:
-            query_words = self.query.split()
-            metadatas= []
-            for i in range(len(inputs)):
-                metadata = {}
-                metadata['always_keep_mask'] = np.array(always_keep_masks[i])
-                metadata['convert_tokens_to_instance'] = self.model.convert_tokens_to_instance
-                metadata['tokens'] = (inputs[i].split() + ["SEP"] + query_words + ["SEP"])[:len(always_keep_masks[i])]
-                metadatas.append(metadata)
-        else:
-            metadatas= []
-            for i in range(len(inputs)):
-                metadata = {}
-                metadata['always_keep_mask'] = np.array(always_keep_masks[i])
-                metadata['convert_tokens_to_instance'] = self.model.convert_tokens_to_instance
-                metadata['tokens'] = (inputs[i].split() + ["SEP"])[:len(always_keep_masks[i])]
-                metadatas.append(metadata)
+                metadatas= []
+                if self.query != None:
+                    query_words = ["[SEP]"] + self.query.split() + ["[SEP]"]
+                else:
+                    query_words = ["[SEP]"]
+                    
+                for i in range(len(inputs)):
+                    metadata = {}
+                    metadata['always_keep_mask'] = np.array(always_keep_masks[i])
+                    metadata['convert_tokens_to_instance'] = self.model.convert_tokens_to_instance
+                    metadata['tokens'] = (list(filter(lambda x: bool(len(x)), inputs[i].strip().split(' '))) + query_words)[:len(always_keep_masks[i])]
+                    metadata['all_tokens'] = list(filter(lambda x: bool(len(x)), inputs[i].strip().split(' '))) + query_words
+                    metadatas.append(metadata)
         
         return {"features":features, "scores":attentions, "predicted_labels": predicted_labels, "probas": probas, "always_keep_masks": always_keep_masks, "metadatas":metadatas}
             
@@ -174,13 +180,12 @@ class GradientExplainer(DefaultMethod):
         score_dict = self.scores(dataset=dataset)
         
         for i in range(len(score_dict["scores"])):
-            saliency = score_dict["scores"][i]
-            scr = []
-            for w in saliency:
-                scr.append(max(0.0, w))
-            
-            saliency = scr + [0.0] * (len(dataset["text"][i].split()) - len(scr))
-            pos = np.array(saliency) > 0
+            saliency = score_dict["scores"][i] + score_dict["metadatas"][i]["always_keep_mask"] * -10000
+            saliency = saliency.tolist() + [0.0] * (len(score_dict["metadatas"][i]["all_tokens"]) - len(saliency))
+            saliency = [0.0 if e < 0.0 else e for e in saliency ]
+            print(saliency, max(saliency))
+
+            pos = np.array(saliency) > 0.0
             vect = np.array(saliency)[pos]
             args = np.argsort(vect)[::-1]
             
@@ -189,12 +194,13 @@ class GradientExplainer(DefaultMethod):
                 saliency = np.array(saliency)
                 saliency[args[top_k:]] = 0.0
             
-            features = np.array(dataset["text"][i].split())
+            #features = np.array(dataset["text"][i].split())
+            features = np.array(score_dict["metadatas"][i]["all_tokens"])
             features = features[pos]
             
             show_text_with_normalized_scores_and_features(
-                dataset["text"][i],
-                scr,
+                score_dict["metadatas"][i]["all_tokens"],
+                np.array(saliency),
                 features[args],
                 vect[args],
                 score_dict["predicted_labels"][i],

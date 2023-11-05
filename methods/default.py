@@ -149,7 +149,7 @@ class DefaultMethod:
     def evidence_preprocessing(self, evidences):
         tokenized_liste = []
         for e in evidences:
-            tokenized_liste.extend(e.split(" "))
+            tokenized_liste.extend(e.split())
 
         return tokenized_liste
    

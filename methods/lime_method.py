@@ -1,10 +1,7 @@
-import json
 import torch
 from lime.lime_text import LimeTextExplainer
 
-from utils import create_dataset_huggingface, create_dataset, CustomDataset, create_batch, create_batch_huggingface
 from methods.default import DefaultMethod
-from torch.utils.data import DataLoader, Dataset
 import math
 
 import numpy as np
@@ -30,15 +27,15 @@ class LimeExplainer(DefaultMethod):
         
         metadatas = []
         if self.query != None:
-            query_tokens = ["SEP"] + self.query.split(" ") + ["SEP"]
+            query_tokens = ["[SEP]"] + self.query.split() + ["[SEP]"]
         else:
-            query_tokens = []
+            query_tokens = ["[SEP]"]
         for i in range(len(inputs)):
             metadata = {}
             always_keep_mask = np.array(always_keep_masks[i])
             metadata['always_keep_mask'] = always_keep_mask
             metadata['convert_tokens_to_instance'] = self.model.convert_tokens_to_instance
-            metadata['tokens'] = inputs[i].split(" ") + query_tokens
+            metadata['tokens'] = list(filter(lambda x: bool(len(x)), inputs[i].strip().split(' '))) + query_tokens
             metadatas.append(metadata)
             
         attentions = []
@@ -97,7 +94,7 @@ class LimeExplainer(DefaultMethod):
             
             weights=explanation.as_list(predicted_label)
             
-            saliency = [0.0 for _ in range(len(row.split()))]
+            saliency = [0.0 for _ in range(len(metadatas[self._J]['tokens']))]
             for f, w in weights:
                 saliency[int(f)] = max(0.0, w)
 
@@ -116,24 +113,6 @@ class LimeExplainer(DefaultMethod):
             self._J+=1
             
         score = [item for sublist in attentions for item in sublist]
-
-        if self.query != None:
-            query_words = self.query.split()
-            metadatas= []
-            for i in range(len(inputs)):
-                metadata = {}
-                metadata['always_keep_mask'] = np.array(always_keep_masks[i])
-                metadata['convert_tokens_to_instance'] = self.model.convert_tokens_to_instance
-                metadata['tokens'] = (inputs[i].split() + ["SEP"] + query_words + ["SEP"])[:len(always_keep_masks[i])]
-                metadatas.append(metadata)
-        else:
-            metadatas= []
-            for i in range(len(inputs)):
-                metadata = {}
-                metadata['always_keep_mask'] = np.array(always_keep_masks[i])
-                metadata['convert_tokens_to_instance'] = self.model.convert_tokens_to_instance
-                metadata['tokens'] = (inputs[i].split() + ["SEP"])[:len(always_keep_masks[i])]
-                metadatas.append(metadata)
         
         return {"features":features, "scores":score, "predicted_labels": predicted_labels, "probas": probabilite, "always_keep_masks": always_keep_masks, "metadatas":metadatas}
             
@@ -145,7 +124,7 @@ class LimeExplainer(DefaultMethod):
         
         metadatas = []
         if self.query != None:
-            query_tokens = ["SEP"] + self.query.split(" ") + ["SEP"]
+            query_tokens = ["SEP"] + self.query.split() + ["SEP"]
         else:
             query_tokens = []
         for i in range(len(inputs)):
@@ -153,7 +132,7 @@ class LimeExplainer(DefaultMethod):
             always_keep_mask = np.array(always_keep_masks[i])
             metadata['always_keep_mask'] = always_keep_mask
             metadata['convert_tokens_to_instance'] = self.model.convert_tokens_to_instance
-            metadata['tokens'] = inputs[i].split(" ") + query_tokens
+            metadata['tokens'] = list(filter(lambda x: bool(len(x)), inputs[i].strip().split(' '))) + query_tokens
             metadatas.append(metadata)
             
         predicted_labels = []
