@@ -1,8 +1,7 @@
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 import numpy as np
 from allennlp.data.tokenizers import Token
-from allennlp.data.token_indexers import TokenIndexer
-from allennlp.data.fields import LabelField, MetadataField, TextField, SequenceLabelField
+from allennlp.data.fields import TextField, SequenceLabelField
 from allennlp.data import Instance
 from allennlp.data.dataset import Batch
 import json
@@ -10,8 +9,7 @@ import torch
 from IPython.display import display, HTML
 import numpy as np
 import pandas as pd
-import colorsys
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding, AutoModel, AutoConfig
+from transformers import AutoTokenizer
 
 
 class CustomDataset(Dataset):
@@ -74,7 +72,7 @@ def create_dataset_with_mask(inputs, inp_stream, device, query):
     always_keep_masks = []
     for docwords in inputs:
         token=[]
-        document_tokens = [Token(word) for word in docwords.split()]
+        document_tokens = [Token(word) for word in docwords.strip().split(' ')]
         token += document_tokens
         
         always_keep_mask = [0] * len(document_tokens)
@@ -154,7 +152,6 @@ def create_always_keep_mask(inputs, query):
     always_keep_masks = []
     kept_tokens = []
     for docwords in inputs:
-        document_tokens = [word for word in docwords.split()]
         
         always_keep_mask = [0] * len(docwords.split())
         always_keep_mask += [1]        
@@ -173,16 +170,18 @@ def create_batch_huggingface(inputs, query, tokenizer, device, kwarg):
     kept_tokens = []
     inputs_in = []
     for docwords in inputs:        
-        always_keep_mask = [0] * len(docwords.split())
+        always_keep_mask = [0] * len(list(filter(lambda x: bool(len(x)), docwords.strip().split(' '))))
         always_keep_mask += [1]        
         
         if query != None:
             always_keep_mask += [1] * (len(query.split()) + 1)
+            kwarg['text'] = " ".join([docwords, "[SEP]", query, "[SEP]"])
+        else:
+            kwarg['text'] = " ".join([docwords, "[SEP]"])
         
         always_keep_masks.append(always_keep_mask)
         kept_tokens.append(torch.tensor([always_keep_mask]).to(device).detach())
         
-        kwarg['text'] = docwords
         inputs_in.append({k: v.to(device) for k, v in tokenizer(**kwarg).items()})
         
 
@@ -200,19 +199,48 @@ def summarize_attentions(attentions):
     importance_features = normalized_attention
     return importance_features[:,0]
 
-def get_token_offsets(inputs, tokenizer):
-    offsets = []
-    for texts in inputs:
-        offset = []
-        last_index = 1
-        for text in texts.split():
-            tokenized = tokenizer(text,return_tensors="pt", truncation=True, max_length=512)
-            offset.append(last_index)
-            last_index+= tokenized['input_ids'].size()[1] - 2
-         
-        offset = np.array(offset)
-        offsets.append(offset[offset<512])
-    return offsets
+def get_token_offsets(inputs, tokenizer, query=None):
+
+    offsets_res = []
+        
+    for text in inputs:
+
+        # Utilisez la méthode encode_plus pour obtenir les offsets
+        if query != None:
+            t_input = " ".join([text, "[SEP]", query, "[SEP]"])
+        else:
+            t_input = " ".join([text, "[SEP]"])
+
+        encoding = tokenizer.encode_plus(
+            t_input,
+            add_special_tokens=False,
+            return_offsets_mapping=True
+        )
+
+        offsets = encoding['offset_mapping']
+
+        # Filtrer les tokens spéciaux (CLS, SEP, PAD, etc.)
+        token_start_indices = []
+        token_end_indices = []
+
+        for i, (start, end) in enumerate(offsets):
+            if start is not None and end is not None:
+                token_start_indices.append(start)
+                token_end_indices.append(end-1)
+
+        # Convertir les indices de caractères en indices de début de mots par rapport aux tokens
+        word_start_indices = [0]
+
+        for i in range(1, len(token_start_indices)):
+            # Vérifiez si le token actuel commence par un espace (nouveau mot)
+            if t_input[token_start_indices[i]-1] == " " and t_input[token_end_indices[i]] != " ":
+                word_start_indices.append(i)
+
+
+        offset = np.array(word_start_indices)
+        offsets_res.append(offset[offset<512])
+
+    return offsets_res
 
 def save_html_to_file(html_content, file_path):
     with open(file_path, 'w', encoding='utf-8') as file:
@@ -226,7 +254,7 @@ def show_text_with_normalized_scores_and_features(text, token_scores, top_k_feat
     
     html = ""
     
-    for token, score in zip(text.split(), normalized_scores):
+    for token, score in zip(text, normalized_scores):
         html += f'<span style="background-color: rgba(255, 140, 0, {score});">{token} </span>'
     
     top_k_features_str = ', '.join(top_k_features)
@@ -278,11 +306,11 @@ def verify_dataset(dataset):
     else:
         return boole, dataset.rename_column(attribut[0],"text")
     
-def verify_tokenizer(url):
+def verify_tokenizer(home, url):
     response = False
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
     try:
-        tokenizer = AutoTokenizer.from_pretrained(url)
+        tokenizer = AutoTokenizer.from_pretrained(home+"/"+url)
         response=True
         model_type = "transformer_huggingfaces"
     except Exception as e:

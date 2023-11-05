@@ -11,10 +11,10 @@ from pathlib import Path
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-#home_directory = os.path.expanduser("~")
+home_directory = os.path.expanduser("~")
 
-#sys.path.append(home_directory+"/explainer")
-#sys.path.append(home_directory+"/Eraser-Benchmark-Baseline-Models")
+sys.path.append(home_directory+"/explainer")
+sys.path.append(home_directory+"/Eraser-Benchmark-Baseline-Models")
 
 from Rationale_model.models.classifiers.soft_encoder_model import SoftEncoderRationaleModel
 import Rationale_model.saliency_scorer.lime
@@ -36,9 +36,9 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, Data
 
 from utils import save_to_json_file, verify_dataset, verify_tokenizer, calculate_comp_value
 
-#home_directory = os.path.expanduser("~")
+home_directory = os.path.expanduser("~")
 
-#sys.path.append(home_directory+"/explainer")
+sys.path.append(home_directory+"/explainer")
 
 from methods.lime_method import LimeExplainer
 import argparse
@@ -60,13 +60,14 @@ if __name__ == "__main__":
     parser.add_argument('--split', type=str)
     parser.add_argument('--metrics', type=str)
     parser.add_argument('--visualize', type=str)
+    parser.add_argument('--query', type=str)
 
     # Analyser les arguments de la ligne de commande
     args = parser.parse_args()
 
     # Accéder aux valeurs des arguments
-    url_data = args.data
-    url_model = args.model
+    url_data = home_directory+"/"+args.data
+    url_model = home_directory+"/"+args.model
     saliency = args.saliency
     task = args.task
     mimic_path = args.mimic_path
@@ -75,6 +76,7 @@ if __name__ == "__main__":
     split = args.split
     metrics = args.metrics
     visualize = args.visualize
+    query = args.query
 
     # Utilisation des valeurs des arguments
     logging.info('Loading data : '+url_data)
@@ -163,7 +165,7 @@ if __name__ == "__main__":
     if model_type == "transformer_huggingfaces":
         att = str(MODEL).split("(")[2].split(")")[0]
         attribut_model = getattr(MODEL, att)
-        tokenizer = verify_tokenizer( args.model)
+        tokenizer = verify_tokenizer(home_directory, args.model)
         model = HuggingFace_Transformer(dataset, model=MODEL, embedding_layer=attribut_model.embeddings, tokenizer=tokenizer)
     elif model_type == "transformer_foreginer":
         model = Foreginer_Transformer(url_model,predictor_type, dataset)
@@ -179,28 +181,25 @@ if __name__ == "__main__":
         model = Linear_Model(dataset)
         
         
-    logging.info('Model loaded')
-
+    
     if saliency == "lime":
-        saliency_scorer = LimeExplainer(model, dataset, 0.5, model_type=model_type)
+        saliency_scorer = LimeExplainer(model, dataset, 0.5, model_type=model_type, query=query)
     elif saliency == "attention":
-        saliency_scorer = AttentionExplainer(model, dataset, 0.5, model_type=model_type)
+        saliency_scorer = AttentionExplainer(model, dataset, 0.5, model_type=model_type, query=query)
     elif saliency == "gradient":
-        saliency_scorer = GradientExplainer(model, dataset, 0.5, model_type=model_type)
+        saliency_scorer = GradientExplainer(model, dataset, 0.5, model_type=model_type, query=query)
     elif saliency == "random":
-        saliency_scorer = RandomExplainer(model, dataset, 0.5, model_type=model_type)
+        saliency_scorer = RandomExplainer(model, dataset, 0.5, model_type=model_type, query=query)
     elif saliency == "white":
         pass
     
-    logging.info('XAI technique loaded\n Computing metrics...\n')
-    
     if metrics != None:
-        scorer_dict = saliency_scorer.scores(dataset)
+        scorer_dict = saliency_scorer.scores(dataset[:3])
     
-        out_dict = saliency_scorer.generate_comprehessiveness_metrics(scorer_dict, dataset)
+        out_dict = saliency_scorer.generate_comprehessiveness_metrics(scorer_dict, dataset[:3])
 
         calculate_comp_value(out_dict)
         if has_evidence:
-            saliency_scorer.generate_token_metrics(scorer_dict, dataset)
+            saliency_scorer.generate_token_metrics(scorer_dict, dataset[:3])
     elif visualize:
-        saliency_scorer.visualize(dataset)
+        saliency_scorer.visualize(dataset[:2])
