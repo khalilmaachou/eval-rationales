@@ -64,7 +64,7 @@ For further details, please refer to the paper:
 ```tex
 @inproceedings{maachou2024eval,
   title={eval-rationales: An End-to-End Toolkit to Explain and Evaluate Transformers-Based Models},
-  author={Maachou, Khalil and Lov{\'o}n-Melgarejo, Jes{\'u}s and Moreno, Jose G and Tamine, Lynda},
+  author={Maachou, Khalil and Lovón-Melgarejo, Jesús and Moreno, Jose G and Tamine, Lynda},
   booktitle={European Conference on Information Retrieval},
   pages={212--217},
   year={2024},
