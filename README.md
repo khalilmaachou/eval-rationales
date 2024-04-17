@@ -59,6 +59,20 @@ The following command line use the available `bert-base-uncased` from the Huggin
 - If you want to use the ERASER models, please do not change the format and keep them as an .tar.gz files.
 - When you want to do the explainability using ERASER code, keep in mind that the batch_size used in the train phase and prediction phase need to be the same.
 
+## Citing
+For further details, please refer to the paper:
+```tex
+@inproceedings{maachou2024eval,
+  title={eval-rationales: An End-to-End Toolkit to Explain and Evaluate Transformers-Based Models},
+  author={Maachou, Khalil and Lov{\'o}n-Melgarejo, Jes{\'u}s and Moreno, Jose G and Tamine, Lynda},
+  booktitle={European Conference on Information Retrieval},
+  pages={212--217},
+  year={2024},
+  organization={Springer}
+}
+```
+
+
 ## Contact
 If you have any problem at all or any suggestions that can optimize this library, you can always contact me using my personal mail: khalilmaachou.99@gmail.com or using this discord server: https://discord.gg/eDTC6688WX.
 
